@@ -46,7 +46,7 @@ public class TrackPoint {
 
     private final long trackPointId;
     private final long trackId;
-    private final LatLong latLong;
+    private LatLong latLong;
     private final boolean pause;
     private final double speed;
 
@@ -133,6 +133,7 @@ public class TrackPoint {
     public LatLong getLatLong() {
         return latLong;
     }
+    public void setLatLong(LatLong latLong) { this.latLong = latLong; }
 
     public double getSpeed() {
         return speed;

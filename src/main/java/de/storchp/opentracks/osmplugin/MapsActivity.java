@@ -67,9 +67,11 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 import java.util.zip.ZipInputStream;
 
 import de.storchp.opentracks.osmplugin.compass.Compass;
@@ -576,6 +578,8 @@ public class MapsActivity extends BaseActivity implements SensorListener {
                     trackColorMode = TrackColorMode.DEFAULT;
                 }
 
+                aggregatePoints(trackpointsBySegments.getSegments());
+
                 for (var trackPoints : trackpointsBySegments.getSegments()) {
                     if (!update) {
                         polyline = null; // cut polyline on new segment
@@ -660,6 +664,68 @@ public class MapsActivity extends BaseActivity implements SensorListener {
             }
             updateDebugTrackPoints();
         }
+    }
+
+    private void aggregatePoints(List<List<TrackPoint>> tracks) {
+        var flatList = tracks.stream()
+                .flatMap(List::stream)
+                .collect(Collectors.toList());
+
+        for (int i = 0; i < flatList.size(); i++) {
+            var outer = flatList.get(i);
+
+            for (int j = 0; j < flatList.size(); j++) {
+                var inner = flatList.get(j);
+
+                var distance = outer.getLatLong().distance(inner.getLatLong());
+                //var distance = currentTrackPoint.getLatLong().sphericalDistance(nextTrackPoint.getLatLong());
+
+                if(distance > 0 && distance < 0.0002) { // distance > 0 && distance < TRACK_POINT_AGGREGATION_LIMIT)
+                    var center = getCommonCenterOfTrackPoints(List.of(outer, inner));
+                    outer.setLatLong(center);
+                    inner.setLatLong(center);
+                }
+            }
+        }
+    }
+
+    private List<List<TrackPoint>> aggregateCloseByTrackPoints(List<List<TrackPoint>> tracks) {
+        tracks.removeIf(track -> track.size() == 0);
+
+        for (int i = 0; i < tracks.size() - 1; i++) {
+            var currentTrack = tracks.get(i);
+            var nextTrack = tracks.get(i + 1);
+
+            for (TrackPoint currentTrackPoint : currentTrack) {
+                for (TrackPoint nextTrackPoint : nextTrack) {
+                    var distance = currentTrackPoint.getLatLong().distance(nextTrackPoint.getLatLong());
+                    //var distance = currentTrackPoint.getLatLong().sphericalDistance(nextTrackPoint.getLatLong());
+
+                    if(distance > 0 && distance < 0.0002) { // distance > 0 && distance < TRACK_POINT_AGGREGATION_LIMIT)
+                        var center = getCommonCenterOfTrackPoints(List.of(currentTrackPoint, nextTrackPoint));
+                        currentTrackPoint.setLatLong(center);
+                        nextTrackPoint.setLatLong(center);
+                    }
+                }
+            }
+        }
+        return tracks;
+    }
+
+    private LatLong getCommonCenterOfTrackPoints(List<TrackPoint> trackPoints) {
+        var allLatitudes = trackPoints.stream().map(trackPoint -> trackPoint.getLatLong().latitude).collect(Collectors.toList());
+        var allLongitudes = trackPoints.stream().map(trackPoint -> trackPoint.getLatLong().longitude).collect(Collectors.toList());
+
+        var minLatitude = allLatitudes.stream().min(Double::compare).get();
+        var maxLatitude = allLatitudes.stream().max(Double::compare).get();
+
+        var minLongitude = allLongitudes.stream().min(Double::compare).get();
+        var maxLongitude = allLongitudes.stream().max(Double::compare).get();
+
+        var centerLatitude = (minLatitude + maxLatitude) / 2;
+        var centerLongitude = (minLongitude + maxLongitude) / 2;
+
+        return new LatLong(centerLatitude, centerLongitude);
     }
 
     private void resetMapData() {
